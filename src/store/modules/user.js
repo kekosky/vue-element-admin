@@ -1,5 +1,17 @@
-import { loginByUsername, logout, getUserInfo } from '@/api/login'
-import { getToken, setToken, removeToken } from '@/utils/auth'
+import {
+  loginByUsername,
+  logout,
+  getUserInfo
+} from '@/api/login'
+import {
+  getToken,
+  setToken,
+  removeToken,
+  getSessionID,
+  setSessionID,
+  removeSessionID,
+  setCookies
+} from '@/utils/auth'
 
 const user = {
   state: {
@@ -13,7 +25,8 @@ const user = {
     roles: [],
     setting: {
       articlePlatform: []
-    }
+    },
+    sessionID: getSessionID()
   },
 
   mutations: {
@@ -40,19 +53,31 @@ const user = {
     },
     SET_ROLES: (state, roles) => {
       state.roles = roles
+    },
+    SET_SESSIONID: (state, sessionid) => {
+      state.sessionID = sessionid
     }
   },
 
   actions: {
     // 用户名登录
-    LoginByUsername({ commit }, userInfo) {
+    LoginByUsername({
+      commit
+    }, userInfo) {
       const username = userInfo.username.trim()
       return new Promise((resolve, reject) => {
         loginByUsername(username, userInfo.password).then(response => {
           const data = response.data
-          commit('SET_TOKEN', data.token)
-          setToken(response.data.token)
-          resolve()
+          if (data.code === '200') {
+            commit('SET_TOKEN', 'admin')
+            setToken('admin')
+            commit('SET_SESSIONID', data.LKJSESSIONID)
+            setSessionID(data.LKJSESSIONID)
+            console.log(`loginByUsername::code === '200'`)
+            resolve()
+          } else {
+            reject('loginByUsername: ' + data.msg)
+          }
         }).catch(error => {
           reject(error)
         })
@@ -60,7 +85,10 @@ const user = {
     },
 
     // 获取用户信息
-    GetUserInfo({ commit, state }) {
+    GetUserInfo({
+      commit,
+      state
+    }) {
       return new Promise((resolve, reject) => {
         getUserInfo(state.token).then(response => {
           if (!response.data) { // 由于mockjs 不支持自定义状态码只能这样hack
@@ -68,15 +96,22 @@ const user = {
           }
           const data = response.data
 
-          if (data.roles && data.roles.length > 0) { // 验证返回的roles是否是一个非空数组
-            commit('SET_ROLES', data.roles)
+          // if (data.roles && data.roles.length > 0) { // 验证返回的roles是否是一个非空数组
+          //   commit('SET_ROLES', data.roles)
+          // } else {
+          //   reject('getInfo: roles must be a non-null array !')
+          // }
+
+          if (data.code === '200') {
+            commit('SET_ROLES', ['admin'])
+            console.log('获取的menus', data.menus)
           } else {
-            reject('getInfo: roles must be a non-null array !')
+            reject('getInfo: 登陆不成功！!')
           }
 
-          commit('SET_NAME', data.name)
-          commit('SET_AVATAR', data.avatar)
-          commit('SET_INTRODUCTION', data.introduction)
+          commit('SET_NAME', data.user.userName)
+          commit('SET_AVATAR', data.user.avatar)
+          commit('SET_INTRODUCTION', data.user.deptName)
           resolve(response)
         }).catch(error => {
           reject(error)
@@ -99,12 +134,20 @@ const user = {
     // },
 
     // 登出
-    LogOut({ commit, state }) {
+    LogOut({
+      commit,
+      state
+    }) {
       return new Promise((resolve, reject) => {
         logout(state.token).then(() => {
           commit('SET_TOKEN', '')
           commit('SET_ROLES', [])
           removeToken()
+
+          setCookies('aa', getSessionID())
+          commit('SET_SESSIONID', '')
+          removeSessionID()
+
           resolve()
         }).catch(error => {
           reject(error)
@@ -113,16 +156,25 @@ const user = {
     },
 
     // 前端 登出
-    FedLogOut({ commit }) {
+    FedLogOut({
+      commit
+    }) {
       return new Promise(resolve => {
         commit('SET_TOKEN', '')
         removeToken()
+
+        setCookies('aa', getSessionID())
+        commit('SET_SESSIONID', '')
+        removeSessionID()
+
         resolve()
       })
     },
 
     // 动态修改权限
-    ChangeRoles({ commit }, role) {
+    ChangeRoles({
+      commit
+    }, role) {
       return new Promise(resolve => {
         commit('SET_TOKEN', role)
         setToken(role)
